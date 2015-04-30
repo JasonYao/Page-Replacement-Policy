@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define PAGEHIT  0
 #define PAGEMISS 1
@@ -32,14 +33,20 @@ int mem_size = 0;  /* memory size in pages */
 *
 */
 
-/* Indices & global vars for use in a queue */
+/* Indices & global vars for use in a fifo queue */
 int head = 0;
 int tail = 0;
 int size = 0;
 
-/* Your job is to implement the following three functions */
+/* Indices & global vars for use in a LRU priority queue */
+int * priority;
+int lruSize = 0;
 
-/* Queue Helper functions */
+/* Indices & global vars for use in my own random replacement */
+int ownSize = 0;
+int count = 0;
+
+/* fifo Helper functions */
 
 /**
  * Adds the new value to the memory array
@@ -107,16 +114,136 @@ int dequeue ()
     }
 } // End of the dequeue function
 
+/* End of the fifo helper functions */
+
+/**
+ * Swap function that swaps both the memory page array and the priority array
+ * @param a index of the first element to be switched
+ * @param b index of the second element to be switched
+ * output: void, but alters mem and priority.
+ */
+void swap(int a, int b)
+{
+    int tempPage = 0;
+    int tempPriority = 0;
+
+    tempPage = mem[a];
+    mem[a] = mem[b];
+    mem[b] = tempPage;
+
+    tempPriority = priority[a];
+    priority[a] = priority[b];
+    priority[b] = tempPriority;
+} // End of swap function
+
+/* lru helper functions */
+
+/**
+ * Sorts the value just inserted based on priority
+ * @param index The index of the recently added element
+ * output: void
+ */
+void bitchSort ()
+{
+    unsigned i;
+    unsigned j;
+    for (i = 0; i < mem_size; ++i)
+    {
+        for (j = 0; j < mem_size - 1; ++j)
+        {
+            if (priority[j] > priority[j + 1])
+            {
+                swap (j, j + 1);
+            }
+        }
+    }
+} // End of the bitchSort function
+
+/**
+ * Enqueue function for lru
+ * NOTE: Blindly adds the value in, so must lruDequeue beforehand if full, otherwise bad things may happen
+ * @param current The current page that is being inserted
+ * output: void
+ */
+void lruEnqueue(int current)
+{
+    // adds the value to the current pointer (should be 1 -> 9, then begins enqueueing from 9)
+    // Adds the value to the rightmost value
+    mem[lruSize] = current; // Only overwrites an empty value, or an already dequeued value
+
+    // Since it was recently added, we initialize priority to 1
+    priority[lruSize] = 1;
+
+    if (lruSize == mem_size - 1)
+        bitchSort();
+
+    // Increments the size
+    ++lruSize;
+} // End of the lruEnqueue function
+
+/**
+ * Dequeue function for lru
+ * NOTE: blindly dequeues in lru, so if mem/priority is empty, tough luck
+ * output: void
+ */
+void lruDequeue()
+{
+    int root = 0;
+    int SOMEBIGVALUE = 2147483647;
+
+    // Removes the root from both arrays
+    mem[root] = 0;
+    priority[root] = SOMEBIGVALUE; // Could have been anything large, really.
+
+    bitchSort();
+
+    // Adjusts the size
+    --lruSize;
+} // End of lruDequeue function
+
+/* End of the lru helper functions */
+
+/* own helper functions */
+
+/**
+ * Adds a page in the order found, unless it's time to use random
+ * @param current The current page that is being inserted
+ * @param index The index of the randomized value that was just generated
+ * output: void
+ */
+void ownEnqueue(int current, int index)
+{
+    if (count <= mem_size - 1)
+        mem[ownSize] = current;
+    else
+        mem[index] = current;
+    ++count;
+    ++ownSize;
+} // End of the ownEnqueue function
+
+/* end of own helper functions */
+
+/* Output: page hit or page miss */
+int mem_check(int page)
+{
+    unsigned i;
+
+    for(i = 0; i < mem_size; i++)
+        if(mem[i] == page)
+            return PAGEHIT;
+
+    return PAGEMISS;
+}
+
 /**
  * Implements a fifo page replacement policy
- * Input: none
- * Output: Index of the page to be replaced
+ * Input: Current the current page being replaced
+ * Output: Void
  */
 void fifo(int current)
 {
     // We know that the most recently used will be the head of the queue
     // Since the wrapper does the isFull() check for us, we know the array is not empty
-
     if (!mem_check(current))
     {
         // This means we have a page hit, no need to enqueue or dequeue
@@ -128,24 +255,68 @@ void fifo(int current)
         // Enqueues the current value
         enqueue(current);
     }
-    return;
 } // End of the fifo function
 
+/* End of the fifo code */
+
+/**
+ * Least recently used page replacement policy, dequeues and enqueues when mem is full
+ * @param current The current page that is being inserted
+ * output: void
+ */
+void lru(int current)
+{
+    if (!mem_check(current))
+    {
+        unsigned i = 0;
+        unsigned final = 0;
+        for (; i < mem_size; ++i)
+        {
+            if (mem[i] == current)
+            {
+                final = i;
+                break;
+            }
+        }
+        // This means we have a page hit, no need to enqueue or dequeue
+        // Updates the priority
+        priority[final] = priority[final] + 1;
+
+        // Updates the heap
+        bitchSort();
+        return;
+    }
+    else
+    {
+        // Dequeues the value with the least priority
+        lruDequeue();
+
+        // Enqueues the current value
+        lruEnqueue(current);
+        return;
+    }
+} // End of the lru function
+
 
 /***************************************************************/
 /* input: none */
-/* output: page to be replaced */
-int lru()
+/* output: void */
+void own(int current)
 {
-    return 0;
-}
-/***************************************************************/
-/* input: none */
-/* output: page to be replaced */
-int own()
-{
-
-    return 0;
+    if (!mem_check(current))
+    {
+        // This means we have a page hit, no need to enqueue or dequeue
+    }
+    else
+    {
+        // We have a pagemiss, so we dequeue and then enqueue
+        //LOL IDGAF ANYMORE
+        //random int between 0 and 9
+        int replacementValue = rand() % 10;
+        --ownSize;
+        // Enqueues the current value
+        ownEnqueue(current, replacementValue);
+    }
 }
 /***************************************************************/
 /* Input: file handle
@@ -179,6 +350,14 @@ void insert(int page, int policy)
         if(page == mem[j])
         {
             // Found a duplicate, no need to replace
+            if (policy == 1)
+            {
+                // Increments the priority due to being recently used for lru
+                priority[j] = priority[j] + 1;
+
+                // Heapifies to update the heap
+                bitchSort();
+            }
             return;
         }
     }
@@ -195,12 +374,13 @@ void insert(int page, int policy)
         case 1:
         {
             // Lru insert
-            //linkedInsert(page);
+            lruEnqueue(page);
             return;
         }
         case 2:
         {
             // Own insert
+            ownEnqueue(page, 0);
             return;
         }
         default:
@@ -214,18 +394,6 @@ void insert(int page, int policy)
 
 /***************************************************************/
 /* Input:  page number */
-/* Output: page hit or page miss */
-int mem_check(int page)
-{
-    unsigned i;
-
-    for(i = 0; i < mem_size; i++)
-        if(mem[i] == page)
-            return PAGEHIT;
-
-    return PAGEMISS;
-
-}
 /***************************************************************/
 /* Input: none
 /* Ouput: 1 if memory is full, 0 otherwise */
@@ -248,10 +416,10 @@ int main(int argc, char * argv[])
     FILE * fp; /* The file containing the page accesses */
     FILE * rp; /* output file */
     char filename[30]={""};
-    const char * extension[] ={".fifo", ".lru", "new"};
+    const char * extension[] ={".fifo", ".lru", ".own"};
     float num_accesses = 0.0; /* total number of page accesses */
     float page_faults = 0.0;
-    unsigned victim = 0;  /* page to be replaced */
+    srand(time(NULL));
 
     /* Getting and checking the input from the command line */
     if(argc != 4)
@@ -283,6 +451,14 @@ int main(int argc, char * argv[])
         exit(1);
     }
 
+    // Allocates and initializes the priority array
+    priority = (int *)calloc(mem_size, sizeof(int));
+    if(!priority)
+    {
+        printf("Cannot allocate priority array\n");
+        exit(1);
+    }
+
     /* open the memory access file */
     fp = fopen(argv[3], "r");
     if(!fp)
@@ -302,8 +478,7 @@ int main(int argc, char * argv[])
     }
 
     /* The main loop of the program */
-    fscanf(fp,"%d", &current);
-    while(!feof(fp))
+    while(fscanf(fp,"%d", &current) == 1)
     {
         num_accesses++;
         if(mem_check(current) == PAGEMISS)
@@ -311,7 +486,8 @@ int main(int argc, char * argv[])
 
         switch(policy)
         {
-            case 0: if(IsFull())
+            case 0:
+                if(IsFull())
                 {
                     // Dequeues and enqueues the current value
                     fifo(current);
@@ -322,8 +498,8 @@ int main(int argc, char * argv[])
 
             case 1: if(IsFull())
                 {
-                    victim = lru();
-                    mem[victim] = current;
+                    // Dequeues and enqueues the current value
+                    lru(current);
                 }
                 else
                     insert(current, policy);
@@ -331,8 +507,7 @@ int main(int argc, char * argv[])
 
             case 2: if( IsFull())
                 {
-                    victim = own();
-                    mem[victim] = current;
+                    own(current);
                 }
                 else
                     insert(current, policy);
@@ -345,7 +520,6 @@ int main(int argc, char * argv[])
         }/* end switch-case */
 
         print_mem(rp);
-        fscanf(fp,"%d", &current);
 
     }/* end while */
     fprintf(rp,"percentage of page faults = %f", page_faults/num_accesses);
@@ -358,4 +532,3 @@ int main(int argc, char * argv[])
     return 1;
 
 } // End of the main function
-
