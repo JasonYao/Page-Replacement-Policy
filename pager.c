@@ -39,8 +39,7 @@ int tail = 0;
 int size = 0;
 
 /* Indices & global vars for use in a LRU priority queue */
-int * priority;
-int lruSize = 0;
+int LRUHEAD = 0;
 
 /* Indices & global vars for use in my own random replacement */
 int ownSize = 0;
@@ -79,42 +78,28 @@ void enqueue (int pageData)
 /**
  * Returns the first value in the memory array queue
  * @param void
- * output: index of the page being replaced
+ * output: void
  */
-int dequeue ()
+void dequeue ()
 {
-    int returnValue;
+    // We know the queue will never be empty, so no need to check
+    // Sets the mem[head] to initial 0
+    mem[head] = 0;
 
-    // Checks to see if the queue is empty
-    if (size == 0)
-    {
-        // Returns a non-valid mem array index number
-        return -1;
-    }
-    else
-    {
-        // Initializes the return value to the mem[head]
-        returnValue = mem[head];
+    // Updates head
+    ++head;
 
-        // Sets the mem[head] to initial 0
-        mem[head] = 0;
+    // Checks for array wrapping
+    if (head >= mem_size)
+        head = 0;
 
-        // Updates head
-        ++head;
-
-        // Checks for array wrapping
-        if (head >= mem_size)
-            head = 0;
-
-        // Decrements the size
-        --size;
-
-        // Returns the value
-        return returnValue;
-    }
+    // Decrements the size
+    --size;
 } // End of the dequeue function
 
 /* End of the fifo helper functions */
+
+/* LRU helper functions */
 
 /**
  * Swap function that swaps both the memory page array and the priority array
@@ -125,83 +110,39 @@ int dequeue ()
 void swap(int a, int b)
 {
     int tempPage = 0;
-    int tempPriority = 0;
 
     tempPage = mem[a];
     mem[a] = mem[b];
     mem[b] = tempPage;
-
-    tempPriority = priority[a];
-    priority[a] = priority[b];
-    priority[b] = tempPriority;
 } // End of swap function
 
-/* lru helper functions */
-
 /**
- * Sorts the value just inserted based on priority
- * @param index The index of the recently added element
+ * Swaps the value all the way until the right
+ * @param the index at which the swaps begin
  * output: void
  */
-void bitchSort ()
+void doShit(int current)
 {
-    unsigned i;
-    unsigned j;
-    for (i = 0; i < mem_size; ++i)
+    int currentIndex = current;
+    while(currentIndex < mem_size - 1)
     {
-        for (j = 0; j < mem_size - 1; ++j)
-        {
-            if (priority[j] > priority[j + 1])
-            {
-                swap (j, j + 1);
-            }
-        }
+        swap(currentIndex, currentIndex + 1);
+        ++currentIndex;
     }
-} // End of the bitchSort function
+} // End of the doShit function
+
 
 /**
- * Enqueue function for lru
- * NOTE: Blindly adds the value in, so must lruDequeue beforehand if full, otherwise bad things may happen
- * @param current The current page that is being inserted
- * output: void
+ * Inserts a page
  */
-void lruEnqueue(int current)
+void lruEnqueue(int page)
 {
-    // adds the value to the current pointer (should be 1 -> 9, then begins enqueueing from 9)
-    // Adds the value to the rightmost value
-    mem[lruSize] = current; // Only overwrites an empty value, or an already dequeued value
+    mem[LRUHEAD] = page;
 
-    // Since it was recently added, we initialize priority to 1
-    priority[lruSize] = 1;
+    doShit(LRUHEAD);
+} // End of lru Enqueue
 
-    if (lruSize == mem_size - 1)
-        bitchSort();
-
-    // Increments the size
-    ++lruSize;
-} // End of the lruEnqueue function
-
-/**
- * Dequeue function for lru
- * NOTE: blindly dequeues in lru, so if mem/priority is empty, tough luck
- * output: void
- */
-void lruDequeue()
-{
-    int root = 0;
-    int SOMEBIGVALUE = 2147483647;
-
-    // Removes the root from both arrays
-    mem[root] = 0;
-    priority[root] = SOMEBIGVALUE; // Could have been anything large, really.
-
-    bitchSort();
-
-    // Adjusts the size
-    --lruSize;
-} // End of lruDequeue function
-
-/* End of the lru helper functions */
+/* End of LRU helper functions */
 
 /* own helper functions */
 
@@ -266,35 +207,23 @@ void fifo(int current)
  */
 void lru(int current)
 {
-    if (!mem_check(current))
+    unsigned i;
+
+    // Searches for duplicates
+    for (i = 0; i < mem_size; ++i)
     {
-        unsigned i = 0;
-        unsigned final = 0;
-        for (; i < mem_size; ++i)
+        if (mem[i] == current)
         {
-            if (mem[i] == current)
-            {
-                final = i;
-                break;
-            }
+            // Duplicate is found
+            // Shifts it to the right
+            doShit(i);
+            return;
         }
-        // This means we have a page hit, no need to enqueue or dequeue
-        // Updates the priority
-        priority[final] = priority[final] + 1;
-
-        // Updates the heap
-        bitchSort();
-        return;
     }
-    else
-    {
-        // Dequeues the value with the least priority
-        lruDequeue();
 
-        // Enqueues the current value
-        lruEnqueue(current);
-        return;
-    }
+    // Enqueues the current value, replaces the least recently used
+    lruEnqueue(current);
+    return;
 } // End of the lru function
 
 
@@ -342,22 +271,16 @@ void print_mem(FILE *file)
  */
 void insert(int page, int policy)
 {
-    unsigned j;
+    unsigned i;
 
-    // Identifies any duplicates in the pages
-    for (j = 0; j < mem_size; ++j)
+    // Searches for duplicates
+    for (i = 0; i < mem_size; ++i)
     {
-        if(page == mem[j])
+        if (mem[i] == page)
         {
-            // Found a duplicate, no need to replace
-            if (policy == 1)
-            {
-                // Increments the priority due to being recently used for lru
-                priority[j] = priority[j] + 1;
-
-                // Heapifies to update the heap
-                bitchSort();
-            }
+            // Duplicate is found
+            // Shifts it to the right
+            doShit(i);
             return;
         }
     }
@@ -448,14 +371,6 @@ int main(int argc, char * argv[])
     if(!mem)
     {
         printf("Cannot allocate mem\n");
-        exit(1);
-    }
-
-    // Allocates and initializes the priority array
-    priority = (int *)calloc(mem_size, sizeof(int));
-    if(!priority)
-    {
-        printf("Cannot allocate priority array\n");
         exit(1);
     }
 
