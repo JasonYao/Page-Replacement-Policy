@@ -235,13 +235,16 @@ void own(int current)
     if (!mem_check(current))
     {
         // This means we have a page hit, no need to enqueue or dequeue
+        return;
     }
     else
     {
         // We have a pagemiss, so we dequeue and then enqueue
         //LOL IDGAF ANYMORE
         //random int between 0 and 9
-        int replacementValue = rand() % 10;
+
+        int replacementValue = rand() % mem_size;
+
         --ownSize;
         // Enqueues the current value
         ownEnqueue(current, replacementValue);
